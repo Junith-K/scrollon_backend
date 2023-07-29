@@ -52,9 +52,13 @@ app.get("/get-posts", async (req, res)=>{
 })
 
 app.get("/post/:id", async (req, res)=>{
-  let result = await users[1].findOne({_id:ObjectId(req.params.id)});
-  res.status(200).json(result)
-})
+  let result = await users[1].findOneAndUpdate(
+    { _id: ObjectId(req.params.id) },
+    { $addToSet: { viewedBy: req.query.uid } },
+    { returnOriginal: true } 
+  );
+  res.status(200).json(result.value)
+})  
 
 app.post("/post/like/:id", async (req, res)=>{
   const { uid, isLiked, isDisLiked } = req.body; 
