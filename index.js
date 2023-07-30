@@ -55,7 +55,7 @@ app.get("/post/:id", async (req, res)=>{
   let result = await users[1].findOneAndUpdate(
     { _id: ObjectId(req.params.id) },
     { $addToSet: { viewedBy: req.query.uid } },
-    { returnOriginal: true } 
+    { returnOriginal: false } 
   );
   res.status(200).json(result.value)
 })  
