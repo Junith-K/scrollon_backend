@@ -5,25 +5,29 @@ const app = express();
 app.use(express.json());
 const cors = require("cors");
 const { ObjectId } = require("mongodb");
-const corsOptions = {
-  origin: "*",
-  credentials: true,
-  optionSuccessStatus: 200,
-};
 
-app.use(cors(corsOptions));
+// const   corsOptions = {
+//   origin: '*',
+//   methods: ['GET','POST','DELETE','UPDATE','PUT','PATCH'],
+//   allowedHeaders: 'Content-Type',
+  // credentials: true, 
+// };
+
+app.use(cors({origin: "*"}));
 let users = [];
 async function getDatabase() {
   users = await getDB;
 }
 
 getDatabase();
-if (!users[0]) {
-  let port = process.env.PORT || 3001;
-  app.listen(port, () => {
-    console.log(`Listening to port ${port}`);
-  });
-}
+let port = process.env.PORT || 3001;
+app.listen(port, () => {
+  console.log(`Listening to port ${port}`);
+});
+
+app.get("/",async (req, res)=>{
+  res.status(200).json({"message": "welcome"})
+})
 
 app.post("/register", async (req, res) => {
   let bodi = req.body;
