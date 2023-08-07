@@ -157,3 +157,42 @@ app.get("/:userid/post/:id", async (req, res)=> {
   console.log(req.params.id);
   res.status(200).json({})
 })
+
+app.post("/post/save/:id/:state", async (req, res)=> {
+  const userid = req.params.id
+  const state = req.params.state
+  let result, resu;
+  if(state=="true"){
+    console.log("pushed")
+    result = await users[0].updateOne({"_id": ObjectId(userid)}, {$addToSet: {"saved_posts": req.body}})
+    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)}, {$addToSet: {"saved_by": userid}})
+  }else{
+    result = await users[0].updateOne({"_id": ObjectId(userid)},{$pull: {"saved_posts": req.body}});
+    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)},{$pull: {"saved_by": userid}});
+    console.log("pulled")
+  }
+  
+  res.status(200).json(resu)
+
+})
+
+app.post("/post/update/:id", async (req,res)=>{
+  
+  const updatedData = {
+    body: req.body.body,
+    title: req.body.title,
+    tag: req.body.tag
+  };
+  const result = await users[1].findOneAndUpdate({ _id: ObjectId(req.params.id) }, { $set: updatedData }, {returnDocument: 'after'});
+  res.status(200).json(result)
+})
+
+app.get("/post/delete/:id", async (req,res)=> {
+  const result = await users[1].deleteOne({ _id: ObjectId(req.params.id) });
+  res.status(200).json(result)
+})
+
+app.get("/test", async (req,res)=> {
+  // const result = await users[1].updateMany({}, { $set: { "saved_by": [] } });
+  // res.status(200).json(result);
+})
