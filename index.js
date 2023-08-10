@@ -56,11 +56,27 @@ app.get("/get-posts", async (req, res)=>{
 })
 
 app.get("/post/:id", async (req, res)=>{
-  let result = await users[1].findOneAndUpdate(
-    { _id: ObjectId(req.params.id) },
-    { $addToSet: { viewedBy: req.query.uid } },
-    { returnOriginal: false } 
-  );
+  const newViewedTime = new Date().toISOString();
+  const doc = await users[1].findOne({_id: ObjectId(req.params.id)})
+  const isUserIdPresent = doc.viewedBy.some((viewed) => viewed.userid === req.query.uid);
+  let result;
+  if(isUserIdPresent){
+    result = await users[1].findOneAndUpdate(
+      { _id: ObjectId(req.params.id), "viewedBy.userid": req.query.uid },
+      {
+        $set: { "viewedBy.$.viewed_time": newViewedTime }
+      }, {returnDocument: 'after'}
+    );
+  }else{
+    result = await users[1].findOneAndUpdate(
+      { _id: ObjectId(req.params.id) },
+      {
+        $addToSet: {
+          viewedBy: { userid: req.query.uid, viewed_time: newViewedTime }
+        }
+      }, {returnDocument: 'after'}
+    );
+  }
   res.status(200).json(result.value)
 })  
 
@@ -80,7 +96,7 @@ app.post("/post/like/:id", async (req, res)=>{
         { _id: ObjectId(req.params.id) },
         {
           $inc: { likes: -1 },
-          $pull: { likedBy: uid } 
+          $pull: { likedBy: { userid: uid } } 
         }
       );
 
@@ -91,8 +107,8 @@ app.post("/post/like/:id", async (req, res)=>{
         { _id: ObjectId(req.params.id) },
         {
           $inc: { likes: isDisLiked ? 2 : 1 }, 
-          $push: { likedBy: uid } ,
-          $pull: { dislikedBy: isDisLiked && uid }
+          $push: { likedBy: {userid: uid, "viewed_time":new Date().toISOString() } } ,
+          $pull: { dislikedBy: isDisLiked && { userid: uid } }
         }
       );
 
@@ -106,7 +122,8 @@ app.post("/post/like/:id", async (req, res)=>{
 })
 
 app.post("/post/dislike/:id", async (req, res)=>{
-  const { uid, isDisLiked, isLiked } = req.body; 
+  const { uid, isDisLiked, isLiked, viewed_time } = req.body; 
+  console.log(viewed_time)
 
   try {
     const post = await users[1].findOne({ _id: ObjectId(req.params.id) });
@@ -121,19 +138,20 @@ app.post("/post/dislike/:id", async (req, res)=>{
         { _id: ObjectId(req.params.id) },
         {
           $inc: { likes: 1 },
-          $pull: { dislikedBy: uid } 
+          $pull: { dislikedBy: { userid: uid } } 
         }
       );
 
       console.log("Removed uid from dislikedBy array");
       res.status(200).send(result)
     } else {
+      let date = new Date().toISOString();
       let result = await users[1].updateOne(
         { _id: ObjectId(req.params.id) },
         {
           $inc: { likes: isLiked ? -2 : -1 }, 
-          $push: { dislikedBy: uid },
-          $pull: { likedBy: isLiked && uid }
+          $push: { dislikedBy: { userid: uid, "viewed_time": date } },
+          $pull: { likedBy: isLiked && { userid: uid } }
         }
       );
 
@@ -165,10 +183,10 @@ app.post("/post/save/:id/:state", async (req, res)=> {
   if(state=="true"){
     console.log("pushed")
     result = await users[0].updateOne({"_id": ObjectId(userid)}, {$addToSet: {"saved_posts": req.body}})
-    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)}, {$addToSet: {"saved_by": userid}})
+    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)}, {$addToSet: {"saved_by": {userid: userid, "viewed_time": new Date().toISOString()} }})
   }else{
     result = await users[0].updateOne({"_id": ObjectId(userid)},{$pull: {"saved_posts": req.body}});
-    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)},{$pull: {"saved_by": userid}});
+    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)},{$pull: {"saved_by": {userid: userid, "viewed_time": new Date().toISOString()}}});
     console.log("pulled")
   }
   
@@ -192,7 +210,63 @@ app.get("/post/delete/:id", async (req,res)=> {
   res.status(200).json(result)
 })
 
-app.get("/test", async (req,res)=> {
-  // const result = await users[1].updateMany({}, { $set: { "saved_by": [] } });
-  // res.status(200).json(result);
+app.get("/profile/myposts/:id", async (req,res)=>{
+  const result = await users[1].find({uid: req.params.id}).toArray()
+  res.status(200).json(result)
 })
+
+app.get("/profile/lastviewed/:id", async (req,res)=>{
+  const viewedByResult = await users[1].find({ 'viewedBy.userid': req.params.id }).toArray();
+  res.status(200).json(viewedByResult)
+})
+
+app.get("/profile/liked/:id", async (req,res)=>{
+  const viewedByResult = await users[1].find({ 'likedBy.userid': req.params.id }).toArray();
+  res.status(200).json(viewedByResult)
+})
+
+app.get("/profile/disliked/:id", async (req,res)=>{
+  const viewedByResult = await users[1].find({ 'dislikedBy.userid': req.params.id }).toArray();
+  res.status(200).json(viewedByResult)
+})
+
+app.get("/profile/saved/:id", async (req,res)=>{
+  const viewedByResult = await users[1].find({ 'saved_by.userid': req.params.id }).toArray();
+  res.status(200).json(viewedByResult)
+})
+
+app.get("/test", async (req,res)=> {
+  await users[1].updateMany(
+    { viewedBy: null },
+    {
+      $set: {
+        viewedBy: []
+      }
+    }
+  );
+  await users[1].updateMany(
+    { likedBy: null },
+    {
+      $set: {
+        likedBy: []
+      }
+    }
+  );
+  await users[1].updateMany(
+    { dislikedBy: null },
+    {
+      $set: {
+        dislikedBy: []
+      }
+    }
+  );
+  await users[1].updateMany(
+    { "saved_by": null },
+    {
+      $set: {
+        "saved_by": []
+      }
+    }
+  );
+  res.status(200).json({})
+});
