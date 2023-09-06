@@ -30,55 +30,126 @@ app.get("/",async (req, res)=>{
 })
 
 app.post("/register", async (req, res) => {
-  let bodi = req.body;
-  let result = await users[0].insertOne(bodi);
-  res.status(200).json(result);
+  try {
+    const bodi = req.body;
+    
+    if (!bodi) {
+      return res.status(400).json({ error: "Request body is empty" });
+    }
+    
+    const result = await users[0].insertOne(bodi);
+    console.log(result)
+    if (result && result.insertedId ) {
+      res.status(200).json(result);
+    } else {
+      return res.status(500).json({ error: "Failed to register user" });
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
+  }
 });
 
-app.post("/sign-in", async (req, res)=>{
-  var arr = await users[0].findOne({email: req.body.email, password: req.body.password})
-  if(!arr){
-    res.status(200).json({error: "No user found"})
+
+app.post("/sign-in", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email or password is missing" });
+    }
+
+    const user = await users[0].findOne({ email, password });
+
+    if (!user) {
+      return res.status(404).json({ error: "No user found" });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
   }
-  else{
-    res.status(200).json(arr)
+});
+
+
+app.post("/create-post", async (req, res) => {
+  try {
+    const post = req.body;
+
+    if (!post) {
+      return res.status(400).json({ error: "Request body is empty" });
+    }
+
+    const result = await users[1].insertOne(post);
+
+    if (!result || !result.insertedCount) {
+      return res.status(500).json({ error: "Failed to create post" });
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
   }
-})
+});
 
-app.post("/create-post", async (req, res)=>{
-  let result = await users[1].insertOne(req.body)
-  res.status(200).json(result);
-})
 
-app.get("/get-posts", async (req, res)=>{
-  let result =  await users[1].find().toArray()
-  res.status(200).json(result)
-})
+app.get("/get-posts", async (req, res) => {
+  try {
+    const posts = await users[1].find().toArray();
+    
+    res.status(200).json(posts);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
+  }
+});
 
-app.get("/post/:id", async (req, res)=>{
-  const newViewedTime = new Date().toISOString();
-  const doc = await users[1].findOne({_id: ObjectId(req.params.id)})
-  const isUserIdPresent = doc.viewedBy.some((viewed) => viewed.userid === req.query.uid);
-  let result;
-  if(isUserIdPresent){
-    result = await users[1].findOneAndUpdate(
-      { _id: ObjectId(req.params.id), "viewedBy.userid": req.query.uid },
-      {
-        $set: { "viewedBy.$.viewed_time": newViewedTime }
-      }, {returnDocument: 'after'}
+
+app.get("/post/:id", async (req, res) => {
+  try {
+    const newViewedTime = new Date().toISOString();
+    const doc = await users[1].findOne({ _id: ObjectId(req.params.id) });
+
+    if (!doc) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    const isUserIdPresent = doc.viewedBy.some(
+      (viewed) => viewed.userid === req.query.uid
     );
-  }else{
-    result = await users[1].findOneAndUpdate(
-      { _id: ObjectId(req.params.id) },
-      {
-        $addToSet: {
-          viewedBy: { userid: req.query.uid, viewed_time: newViewedTime }
-        }
-      }, {returnDocument: 'after'}
-    );
+
+    let result;
+
+    if (isUserIdPresent) {
+      result = await users[1].findOneAndUpdate(
+        { _id: ObjectId(req.params.id), "viewedBy.userid": req.query.uid },
+        {
+          $set: { "viewedBy.$.viewed_time": newViewedTime },
+        },
+        { returnDocument: "after" }
+      );
+    } else {
+      result = await users[1].findOneAndUpdate(
+        { _id: ObjectId(req.params.id) },
+        {
+          $addToSet: {
+            viewedBy: { userid: req.query.uid, viewed_time: newViewedTime },
+          },
+        },
+        { returnDocument: "after" }
+      );
+    }
+
+    if (!result.value) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    res.status(200).json(result.value);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
   }
-  res.status(200).json(result.value)
-})  
+});
+
 
 app.post("/post/like/:id", async (req, res)=>{
   const { uid, isLiked, isDisLiked } = req.body; 
@@ -164,109 +235,171 @@ app.post("/post/dislike/:id", async (req, res)=>{
   }
 })
 
-app.post("/comment/:id", async (req, res)=>{
-  let bodi = req.body
-  let result = await users[1].update({"_id": ObjectId(req.params.id)},{$push: {"comment": bodi}})
-  res.status(200).json(result)
-})
+app.post("/comment/:id", async (req, res) => {
+  try {
+    const body = req.body;
 
-app.get("/:userid/post/:id", async (req, res)=> {
-  console.log(req.params.userid)
-  console.log(req.params.id);
-  res.status(200).json({})
-})
+    if (!body) {
+      return res.status(400).json({ error: "Request body is empty" });
+    }
 
-app.post("/post/save/:id/:state", async (req, res)=> {
-  const userid = req.params.id
-  const state = req.params.state
-  let result, resu;
-  if(state=="true"){
-    console.log("pushed")
-    result = await users[0].updateOne({"_id": ObjectId(userid)}, {$addToSet: {"saved_posts": req.body}})
-    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)}, {$addToSet: {"saved_by": {userid: userid, "viewed_time": new Date().toISOString()} }})
-  }else{
-    result = await users[0].updateOne({"_id": ObjectId(userid)},{$pull: {"saved_posts": req.body}});
-    resu = await users[1].updateOne({"_id": ObjectId(req.body.post_id)},{$pull: {"saved_by": {userid: userid, "viewed_time": new Date().toISOString()}}});
-    console.log("pulled")
+    const result = await users[1].updateOne(
+      { _id: ObjectId(req.params.id) },
+      { $push: { comment: body } }
+    );
+
+    if (!result) {
+      return res.status(500).json({ error: "Failed to add comment" });
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
   }
-  
-  res.status(200).json(resu)
+});
 
-})
 
-app.post("/post/update/:id", async (req,res)=>{
-  
-  const updatedData = {
-    body: req.body.body,
-    title: req.body.title,
-    tag: req.body.tag
-  };
-  const result = await users[1].findOneAndUpdate({ _id: ObjectId(req.params.id) }, { $set: updatedData }, {returnDocument: 'after'});
-  res.status(200).json(result)
-})
+app.post("/post/save/:id/:state", async (req, res) => {
+  const userid = req.params.id;
+  const state = req.params.state;
+  let result, resu;
 
-app.get("/post/delete/:id", async (req,res)=> {
-  const result = await users[1].deleteOne({ _id: ObjectId(req.params.id) });
-  res.status(200).json(result)
-})
+  try {
+    if (state === "true") {
+      console.log("pushed");
+      result = await users[0].updateOne(
+        { _id: ObjectId(userid) },
+        { $addToSet: { saved_posts: req.body } }
+      );
 
-app.get("/profile/myposts/:id", async (req,res)=>{
-  const result = await users[1].find({uid: req.params.id}).toArray()
-  res.status(200).json(result)
-})
+      resu = await users[1].updateOne(
+        { _id: ObjectId(req.body.post_id) },
+        {
+          $addToSet: {
+            saved_by: {
+              userid: userid,
+              viewed_time: new Date().toISOString(),
+            },
+          },
+        }
+      );
+    } else {
+      console.log("pulled");
+      result = await users[0].updateOne(
+        { _id: ObjectId(userid) },
+        { $pull: { saved_posts: req.body } }
+      );
 
-app.get("/profile/lastviewed/:id", async (req,res)=>{
-  const viewedByResult = await users[1].find({ 'viewedBy.userid': req.params.id }).toArray();
-  res.status(200).json(viewedByResult)
-})
-
-app.get("/profile/liked/:id", async (req,res)=>{
-  const viewedByResult = await users[1].find({ 'likedBy.userid': req.params.id }).toArray();
-  res.status(200).json(viewedByResult)
-})
-
-app.get("/profile/disliked/:id", async (req,res)=>{
-  const viewedByResult = await users[1].find({ 'dislikedBy.userid': req.params.id }).toArray();
-  res.status(200).json(viewedByResult)
-})
-
-app.get("/profile/saved/:id", async (req,res)=>{
-  const viewedByResult = await users[1].find({ 'saved_by.userid': req.params.id }).toArray();
-  res.status(200).json(viewedByResult)
-})
-
-app.get("/test", async (req,res)=> {
-  await users[1].updateMany(
-    { viewedBy: null },
-    {
-      $set: {
-        viewedBy: []
-      }
+      resu = await users[1].updateOne(
+        { _id: ObjectId(req.body.post_id) },
+        {
+          $pull: {
+            saved_by: { userid: userid, viewed_time: new Date().toISOString() },
+          },
+        }
+      );
     }
-  );
-  await users[1].updateMany(
-    { likedBy: null },
-    {
-      $set: {
-        likedBy: []
-      }
+
+    res.status(200).json(resu);
+  } catch (error) {
+    console.error("Error updating document:", error);
+    res.status(500).json(error);
+  }
+});
+
+
+app.post("/post/update/:id", async (req, res) => {
+  try {
+    const updatedData = {
+      body: req.body.body,
+      title: req.body.title,
+      tag: req.body.tag,
+    };
+
+    const result = await users[1].findOneAndUpdate(
+      { _id: ObjectId(req.params.id) },
+      { $set: updatedData },
+      { returnDocument: 'after' }
+    );
+
+    if (!result.value) {
+      return res.status(404).json({ error: "Post not found" });
     }
-  );
-  await users[1].updateMany(
-    { dislikedBy: null },
-    {
-      $set: {
-        dislikedBy: []
-      }
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error updating document:", error);
+    res.status(500).json(error);
+  }
+});
+
+
+app.get("/post/delete/:id", async (req, res) => {
+  try {
+    const result = await users[1].deleteOne({ _id: ObjectId(req.params.id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Post not found" });
     }
-  );
-  await users[1].updateMany(
-    { "saved_by": null },
-    {
-      $set: {
-        "saved_by": []
-      }
-    }
-  );
-  res.status(200).json({})
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error deleting document:", error);
+    res.status(500).json(error);
+  }
+});
+
+
+app.get("/profile/myposts/:id", async (req, res) => {
+  try {
+    const result = await users[1].find({ uid: req.params.id }).toArray();
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching posts:", error);
+    res.status(500).json(error);
+  }
+});
+
+
+app.get("/profile/lastviewed/:id", async (req, res) => {
+  try {
+    const viewedByResult = await users[1].find({ 'viewedBy.userid': req.params.id }).toArray();
+    res.status(200).json(viewedByResult);
+  } catch (error) {
+    console.error("Error fetching last viewed posts:", error);
+    res.status(500).json(error);
+  }
+});
+
+
+app.get("/profile/liked/:id", async (req, res) => {
+  try {
+    const likedByResult = await users[1].find({ 'likedBy.userid': req.params.id }).toArray();
+    res.status(200).json(likedByResult);
+  } catch (error) {
+    console.error("Error fetching liked posts:", error);
+    res.status(500).json(error);
+  }
+});
+
+
+app.get("/profile/disliked/:id", async (req, res) => {
+  try {
+    const dislikedByResult = await users[1].find({ 'dislikedBy.userid': req.params.id }).toArray();
+    res.status(200).json(dislikedByResult);
+  } catch (error) {
+    console.error("Error fetching disliked posts:", error);
+    res.status(500).json(error);
+  }
+});
+
+
+app.get("/profile/saved/:id", async (req, res) => {
+  try {
+    const savedByResult = await users[1].find({ 'saved_by.userid': req.params.id }).toArray();
+    res.status(200).json(savedByResult);
+  } catch (error) {
+    console.error("Error fetching saved posts:", error);
+    res.status(500).json(error);
+  }
 });
